@@ -1,0 +1,79 @@
+CREATE TABLE detailed (
+  customer_id integer,
+  first_name varchar(50),
+  last_name varchar(50),
+  email varchar(100),
+  rental_id integer,
+  rental_date timestamp );
+  
+SELECT * FROM detailed; –verify the table has been created.
+
+CREATE TABLE summary (
+  visit_count integer,
+  full_name varchar(100),
+  email varchar(100) );
+  
+SELECT * FROM summary; – verify the table has been created.
+
+--populates the detailed database with data from the customer and rental tables
+
+INSERT INTO detailed
+(customer_id, first_name, last_name, email, rental_id, rental_date)
+SELECT
+c.customer_id, c.first_name, c.last_name, c.email, r.rental_id, r.rental_date
+FROM rental AS r
+INNER JOIN customer AS c ON c.customer_id = r.customer_id;
+
+SELECT * FROM detailed; -- verify that the data has been inserted.
+
+CREATE OR REPLACE FUNCTION update_function()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS
+$$
+BEGIN
+DELETE FROM summary;
+INSERT INTO summary (
+  SELECT
+    COUNT(customer_id) AS visit_count,
+    CONCAT(first_name, ‘ ‘, last_name) AS full_name,
+    email
+  FROM detailed
+GROUP BY customer_id, full_name, email
+HAVING COUNT (customer_id) > 30
+ORDER BY COUNT(customer_id) DESC
+LIMIT 100 );
+RETURN NEW;
+END;
+$$;
+
+--Creates a function that clears the summary database and inserts updated information
+from the detailed database
+
+CREATE TRIGGER update_table
+AFTER INSERT ON detailed
+FOR EACH STATEMENT
+EXECUTE PROCEDURE update_function();
+
+--Creates a trigger that calls upon the update function
+
+CREATE OR REPLACE PROCEDURE refresh_detailed()
+LANGUAGE plpgsql
+AS
+$$
+BEGIN
+DELETE FROM detailed;
+INSERT INTO detailed
+(customer_id, first_name, last_name, email, rental_id, rental_date)
+SELECT c.customer_id, c.first_name, c.last_name, c.email, r.rental_id, r.rental_date
+FROM rental AS r
+INNER JOIN customer AS c ON c.customer_id = r.customer_id;
+END;
+$$;
+
+CALL refresh_detailed(); --calls procedure that activates the trigger that activates the function
+
+SELECT * FROM detailed; --verify data
+
+SELECT * FROM summary; --verify data
+
